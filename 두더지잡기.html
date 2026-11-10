@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>두더지 잡기</title>
+
+  <!-- ===== 꾸미기 (색, 크기, 모양) ===== -->
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #a8e063;
+      text-align: center;
+      user-select: none;
+    }
+    h1 { margin: 20px 0 10px; color: #4b2e0f; }
+
+    .info {
+      font-size: 22px;
+      font-weight: bold;
+      color: #4b2e0f;
+      margin-bottom: 10px;
+    }
+
+    button {
+      font-size: 20px;
+      padding: 10px 30px;
+      border: none;
+      border-radius: 10px;
+      background: #ff8c42;
+      color: white;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    button:hover { background: #ff7020; }
+
+    /* 구멍 9개를 3줄로 놓기 */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 110px);
+      gap: 15px;
+      justify-content: center;
+    }
+
+    /* 구멍 하나 */
+    .hole {
+      width: 110px;
+      height: 110px;
+      background: #6b3e1f;
+      border-radius: 50%;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    /* 두더지 (처음엔 구멍 아래에 숨어 있음) */
+    .mole {
+      position: absolute;
+      left: 50%;
+      bottom: -100px;
+      transform: translateX(-50%);
+      font-size: 70px;
+      transition: bottom 0.15s;
+    }
+    /* 'up'이 붙으면 위로 올라옴 */
+    .hole.up .mole { bottom: 10px; }
+
+    /* 맞았을 때 잠깐 노란색 */
+    .hole.hit { background: #f5c542; }
+
+    /* 폭탄을 눌렀을 때 잠깐 빨간색 */
+    .hole.boom { background: #e53935; }
+
+    .rule { color: #4b2e0f; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>🔨 두더지 잡기</h1>
+  <div class="info">
+    점수: <span id="score">0</span> &nbsp;|&nbsp;
+    남은 시간: <span id="time">30</span>초 &nbsp;|&nbsp;
+    최고 점수: <span id="best">0</span>
+  </div>
+  <div class="rule">🐹 잡으면 +1점 &nbsp;|&nbsp; 💣 누르면 -3점!</div>
+  <button id="startBtn">게임 시작</button>
+
+  <div class="board" id="board"></div>
+
+  <!-- ===== 게임 동작 ===== -->
+  <script>
+    // 화면에 있는 것들 가져오기
+    const board = document.getElementById("board");
+    const scoreText = document.getElementById("score");
+    const timeText = document.getElementById("time");
+    const bestText = document.getElementById("best");
+    const startBtn = document.getElementById("startBtn");
+
+    let score = 0;        // 지금 점수
+    let timeLeft = 30;    // 남은 시간
+    let playing = false;  // 게임 중인지
+    let timer;            // 1초마다 시간 줄이는 장치
+    let best = Number(localStorage.getItem("bestScore")) || 0; // 최고 점수 기억
+    bestText.textContent = best;
+
+    // 1) 구멍 9개 만들기
+    const holes = [];
+    for (let i = 0; i < 9; i++) {
+      const hole = document.createElement("div");
+      hole.className = "hole";
+      hole.innerHTML = '<div class="mole">🐹</div>';
+      hole.addEventListener("click", () => hitMole(hole));
+      board.appendChild(hole);
+      holes.push(hole);
+    }
+
+    // 2) 두더지 하나를 아무 구멍에서 튀어나오게 하기
+    function showMole() {
+      if (!playing) return;
+
+      // 아무 구멍이나 하나 고르기
+      const hole = holes[Math.floor(Math.random() * holes.length)];
+      if (hole.classList.contains("up")) {
+        // 이미 나와 있으면 다시 고르기
+        setTimeout(showMole, 100);
+        return;
+      }
+
+      // 5번 중 1번 정도는 두더지 대신 폭탄이 나옴
+      const isBomb = Math.random() < 0.2;
+      hole.dataset.type = isBomb ? "bomb" : "mole";
+      hole.querySelector(".mole").textContent = isBomb ? "💣" : "🐹";
+
+      hole.classList.add("up");
+
+      // 시간이 갈수록 빨라짐 (처음 0.9초 → 나중 0.5초)
+      const stayTime = 500 + timeLeft * 13;
+
+      // 잠깐 있다가 다시 숨기
+      setTimeout(() => hole.classList.remove("up"), stayTime);
+
+      // 다음 두더지 부르기
+      setTimeout(showMole, stayTime * 0.7);
+    }
+
+    // 3) 두더지를 클릭했을 때
+    function hitMole(hole) {
+      if (!playing || !hole.classList.contains("up")) return;
+
+      // 폭탄이면 3점 깎기, 두더지면 1점 더하기
+      let flash;
+      if (hole.dataset.type === "bomb") {
+        score -= 3;
+        if (score < 0) score = 0;  // 0점보다 내려가지 않게
+        flash = "boom";
+      } else {
+        score++;
+        flash = "hit";
+      }
+      scoreText.textContent = score;
+
+      hole.classList.remove("up");
+      hole.classList.add(flash);
+      setTimeout(() => hole.classList.remove(flash), 200);
+    }
+
+    // 4) 게임 시작
+    function startGame() {
+      score = 0;
+      timeLeft = 30;
+      playing = true;
+      scoreText.textContent = score;
+      timeText.textContent = timeLeft;
+      startBtn.disabled = true;
+      startBtn.textContent = "게임 중...";
+
+      showMole();
+
+      // 1초마다 시간 1씩 줄이기
+      timer = setInterval(() => {
+        timeLeft--;
+        timeText.textContent = timeLeft;
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    }
+
+    // 5) 게임 끝
+    function endGame() {
+      playing = false;
+      clearInterval(timer);
+      holes.forEach(h => h.classList.remove("up"));
+
+      if (score > best) {
+        best = score;
+        localStorage.setItem("bestScore", best);
+        bestText.textContent = best;
+        alert("🎉 새 최고 점수! " + score + "점");
+      } else {
+        alert("게임 끝! 점수: " + score + "점");
+      }
+
+      startBtn.disabled = false;
+      startBtn.textContent = "다시 하기";
+    }
+
+    startBtn.addEventListener("click", startGame);
+  </script>
+</body>
+</html>
